@@ -1,0 +1,352 @@
+import os
+import tkinter as tk
+from tkinter import messagebox
+import cv2
+import matplotlib.pyplot as plt
+import pandas as pd
+from deepface import DeepFace
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as ReportLabImage
+global re
+
+
+def get_user_info():
+    global name, re, re_entry  # Adiciona 'RE_entry' à lista de variáveis globais
+    def submit():
+        global name, re  # Adiciona 'RE' à lista de variáveis globais
+        name = name_entry.get()
+
+
+        re = re_entry.get()  # Armazena o RE na variável global
+        print(f"Nome: {name}, RE: {re}")  # Verifique se os dados estão corretos
+
+        if not name or not re:
+            messagebox.showwarning("Aviso", "Todos os campos devem ser preenchidos.")
+        else:
+            root.destroy()
+
+    # Criação da interface gráfica
+    root = tk.Tk()
+    root.title("Digite suas Informações antes de Iniciar")
+    root.geometry("600x600")
+
+    # Descrição do procedimento
+    description = (
+        "Monitoramento de funcionários"
+    )
+    tk.Label(root, text=description, wraplength=600, justify="center").grid(row=1, column=0, columnspan=2, pady=10)
+
+    # Nome
+    tk.Label(root, text="Nome:", anchor='w').grid(row=2, column=0, padx=10, pady=5, sticky='w')
+    name_entry = tk.Entry(root)
+    name_entry.grid(row=2, column=1, padx=10, pady=5)
+
+
+    # RE
+    tk.Label(root, text="RE:", anchor='w').grid(row=5, column=0, padx=10, pady=5, sticky='w')
+    re_entry = tk.Entry(root)
+    re_entry.grid(row=5, column=1, padx=10, pady=5)
+
+    # Botão de login
+    tk.Button(root, text="LOGIN", command=submit).grid(row=6, column=0, columnspan=2, pady=10)
+
+    # Botão para verificar dados gravados
+    tk.Button(root, text="Verificar Dados gravados", command=buscar_dados).grid(row=7, column=0, columnspan=2, pady=10)
+
+    root.mainloop()
+
+#-------------------------------------------------------------EXCEL---------
+
+# Função para gerar o gráfico de tendência com base no RE fornecido
+
+
+
+def generate_trend_graph(re_to_check):
+
+    excel_file = 'analise_emocional.xlsx'
+
+    if not os.path.exists(excel_file):
+        messagebox.showwarning("Aviso", "Arquivo de análise emocional não encontrado.")
+        return
+
+    # Obtém o RE da variável global
+    re_to_check = re.strip()  # Remove espaços em branco
+    print(f"Verificando re: '{re_to_check}'")
+
+    # Lê os dados do arquivo Excel
+    df = pd.read_excel(excel_file)
+
+    # Converte a coluna RE para string
+    df['RE'] = df['RE'].astype(str)  # Certifique-se de que os REs estão no formato correto
+
+    # Debug prints
+    print("Dados do Excel:")
+    print(df.head())  # Exibe as primeiras linhas do DataFrame
+
+    # Verifica se o RE está na coluna correspondente
+    user_data = df[df['RE'].str.replace(".", "").str.replace("-", "").str.strip() == re_to_check]
+
+    print("Dados do usuário filtrados:", user_data)  # Isso mostrará se o RE foi encontrado
+
+    if user_data.empty:
+        messagebox.showwarning("Aviso", "Usuário não possui dados.")
+        return
+
+
+    # Verifica se as colunas de emoções existem
+    emotion_columns = [col for col in df.columns if col in ['Desgosto', 'Medo', 'Ansiedade', 'Tristeza', 'Raiva', 'Alegria', 'Neutro', 'Desprezo', 'Tédio']]
+
+    if not emotion_columns:
+        messagebox.showwarning("Aviso", "Nenhum dado de emoção encontrado.")
+        return
+
+    # Filtra os dados apenas para o RE informado
+    trend_data = user_data[emotion_columns]
+
+    # Plota o gráfico de tendência
+    trend_data.plot(kind='line', marker='o', figsize=(12, 8))
+    plt.title(f'Tendência das Emoções para o CPF {re_to_check}', fontsize=16)
+    plt.xlabel('Análises', fontsize=14)
+    plt.ylabel('Porcentagem (%)', fontsize=14)
+    plt.xticks(range(len(trend_data)), [f'Análise {i + 1}' for i in range(len(trend_data))], fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.legend(emotion_columns, fontsize=12)
+    plt.grid(True)
+
+    # Salva o gráfico
+    plt.savefig('trend_graph.png')
+    plt.show()  # Adiciona isso para exibir o gráfico
+
+def buscar_dados():
+    global re_entry  # Torna a variável cpf_entry acessível
+    re_to_check = re_entry.get().strip()
+
+    # Caminho do arquivo Excel
+    excel_file = r"analise_emocional.xlsx"
+
+    if not os.path.exists(excel_file):
+        messagebox.showwarning("Aviso", "Arquivo de análise emocional não encontrado.")
+        return
+
+    # Lê os dados do arquivo Excel
+    df = pd.read_excel(excel_file)
+
+    # Limpa os REs na coluna
+    df['RE'] = df['RE'].astype(str).str.replace('.', '').str.replace('-', '').str.strip()
+
+    # Busca os dados do RE
+    user_data = df[df['RE'] == re_to_check]
+
+    if user_data.empty:
+        messagebox.showwarning("Aviso", "Nenhum dado encontrado para o RE informado.")
+        return  # Se o re não existir, sai da função e não gera o gráfico
+    else:
+        # Lista das colunas relacionadas às emoções
+        emotion_columns = ['Desgosto', 'Medo', 'Ansiedade', 'Tristeza', 'Raiva', 'Alegria', 'Neutro', 'Desprezo', 'Tédio']
+
+        # Verifica se as colunas de emoções existem no DataFrame
+        available_emotions = [col for col in emotion_columns if col in user_data.columns]
+
+        if not available_emotions:
+            messagebox.showwarning("Aviso", "Nenhum dado de emoção encontrado.")
+            return
+
+        # Plotando os dados de emoções
+        user_data[available_emotions].plot(kind='bar', figsize=(10, 6))
+
+        plt.title(f"Emoções do RE {re_to_check}")
+        plt.xlabel("Emoções")
+        plt.ylabel("Porcentagem")
+        plt.xticks(rotation=45)
+
+        plt.tight_layout()
+
+        # Exibe o gráfico
+        plt.show()
+
+
+#--------------------------------------------------------------------------------------------EXCEL---------
+# Coleta de informações iniciais
+name, re = "", ""
+get_user_info()
+
+# Inicializa a captura de vídeo da webcam
+cap = cv2.VideoCapture(0)
+
+if not cap.isOpened():
+    print("Erro ao acessar a webcam")
+    exit()
+
+frame_count = 0
+capture_limit = 10  # Número de capturas
+captured_images = []
+emotion_counts = {
+    'Desgosto': 0,
+    'Medo': 0,
+    'Ansiedade': 0,
+    'Tristeza': 0,
+    'Raiva': 0,
+    'Alegria': 0,
+    'Neutro': 0,
+    'Desprezo': 0,
+    'Tédio': 0
+}
+
+# Variável para controlar quando iniciar a captura
+start_capture = False
+detected_ages = []
+
+while frame_count < capture_limit:
+    ret, frame = cap.read()
+    if not ret:
+        print("Falha ao capturar a imagem")
+        break
+
+    # Redimensiona o frame para melhorar o desempenho
+    scale_percent = 90
+    width = int(frame.shape[1] * scale_percent / 100)
+    height = int(frame.shape[0] * scale_percent / 100)
+    dim = (width, height)
+    frame_resized = cv2.resize(frame, dim, interpolation=cv2.INTER_AREA)
+
+    # Verifica se há um rosto dentro da elipse
+    gray = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2GRAY)
+    face_cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+    face_cascade = cv2.CascadeClassifier(face_cascade_path)
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+    face_in_ellipse = False
+
+    for (x, y, w, h) in faces:
+        face_in_ellipse = True
+        start_capture = True
+        break
+
+    if start_capture and face_in_ellipse:
+        img_path = f'temp_frame_{frame_count}.jpg'
+        cv2.imwrite(img_path, frame_resized)
+        captured_images.append(img_path)
+
+        try:
+            # Análise de expressões faciais com DeepFace
+            analysis = DeepFace.analyze(img_path, actions=['emotion', 'age'], enforce_detection=False)
+            dominant_emotion = analysis[0]['dominant_emotion']
+            detected_age = analysis[0]['age']
+            detected_ages.append(detected_age)
+
+            # Incrementa a emoção correspondente
+            emotion_translation = {
+                'happy': 'Alegria',
+                'sad': 'Tristeza',
+                'angry': 'Raiva',
+                'surprise': 'Surpresa',
+                'fear': 'Medo',
+                'disgust': 'Desgosto',
+                'neutral': 'Neutro',
+                'contempt': 'Desprezo',
+                'boredom': 'Tédio'
+            }
+            translated_emotion = emotion_translation.get(dominant_emotion, 'Neutro')
+            emotion_counts[translated_emotion] += 1
+
+        except Exception as e:
+            print(f"Erro na análise: {e}")
+
+        frame_count += 1
+
+    # Exibe a imagem
+    cv2.imshow('Webcam', frame_resized)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# Libera a captura e fecha a janela
+cap.release()
+cv2.destroyAllWindows()
+
+# Calcula a porcentagem de cada emoção
+total_detected = sum(emotion_counts.values())
+emotion_percentages = {emotion: (count / total_detected) * 100 for emotion, count in emotion_counts.items()}
+
+# Remove  "Neutro"
+if 'Neutro' in emotion_percentages:
+    del emotion_percentages['Neutro']
+if not emotion_percentages:
+    emotion_percentages = {'Nenhuma emoção detectada': 100}
+
+
+# Exibe o gráfico de emoções ajustado
+plt.figure(figsize=(12, 8))  # Aumenta o tamanho do gráfico
+bars = plt.bar(emotion_percentages.keys(), emotion_percentages.values(), color='Tomato',
+               width=0.5)  # Ajusta a largura das barras
+for bar in bars:
+    height = bar.get_height()
+    plt.text(bar.get_x() + bar.get_width() / 2.0, height + 1, f'{height:.2f}%', ha='center', va='bottom',
+             fontsize=16)  # Aumenta o tamanho da fonte e ajusta a posição
+plt.title('Gráfico das Emoções Detectadas', fontsize=16)
+plt.ylabel('Porcentagem (%)', fontsize=16)
+plt.ylim(0, 100)  # Define os limites do eixo Y de 0 a 100%
+plt.xticks(fontsize=14)  # Aumenta o tamanho da fonte dos rótulos do eixo x
+plt.yticks(fontsize=14)  # Aumenta o tamanho da fonte dos rótulos do eixo y
+plt.savefig('emotion_graph.png')
+
+
+#--------------------------------------------------------------------------------------------EXCEL---------
+# Criação do arquivo Excel para salvar as porcentagens das emoções
+data = {'Nome': [name],
+        'RE': [re]}
+data.update(emotion_percentages)  # Adiciona as porcentagens de emoções
+
+df = pd.DataFrame(data)
+
+excel_file = 'analise_emocional.xlsx'
+
+# Verifica se o arquivo Excel já existe
+if os.path.exists(excel_file):
+    # Se o arquivo existir, abre o arquivo sem sobrescrever
+    existing_df = pd.read_excel(excel_file)
+    df = pd.concat([existing_df, df], ignore_index=True)
+
+# Salva os dados no arquivo Excel (modo append)
+df.to_excel(excel_file, index=False)
+#--------------------------------------------------------------------------------------------EXCEL---------
+###########################
+# Criação do relatório em PDF
+report_name = "Relatorio_Emocional.pdf"
+doc = SimpleDocTemplate(report_name, pagesize=letter)
+
+# Estilos e elementos do relatório
+styles = getSampleStyleSheet()
+style_center = styles["Title"]
+style_center.alignment = TA_CENTER
+
+elements = []
+
+
+# Adiciona o título e informações pessoais
+elements.append(Paragraph("Relatório de Análise Emocional", style_center))
+elements.append(Spacer(1, 12))
+elements.append(Paragraph(f"Nome: {name}", styles["Normal"]))
+
+elements.append(Paragraph(f"RE: {re}", styles["Normal"]))
+elements.append(Spacer(1, 12))
+
+# Adiciona o gráfico de emoções
+elements.append(Paragraph("Gráfico de Emoções", styles["Normal"]))
+elements.append(Spacer(1, 12))
+elements.append(ReportLabImage('emotion_graph.png', width=6 * inch, height=4 * inch))
+
+# Construção do PDF
+doc.build(elements)
+
+# Remove os arquivos temporários
+for img_path in captured_images:
+    os.remove(img_path)
+
+os.remove('emotion_graph.png')
+
+
+# Abre o PDF gerado
+os.system(report_name)
